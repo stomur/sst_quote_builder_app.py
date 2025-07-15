@@ -2,55 +2,74 @@
 import streamlit as st
 import pandas as pd
 
-# Load Tomur Surgeon Fees
-surgeon_fee_df = pd.read_excel("Updated  Cosmetic-pricing PCSC 2025.xlsx", sheet_name=None)
-surgical_procedures = {}
-for sheet, df in surgeon_fee_df.items():
-    df = df.dropna(subset=[df.columns[0], df.columns[1]])
-    for _, row in df.iterrows():
-        name, price = row.iloc[0], row.iloc[1]
-        if isinstance(price, (int, float)):
-            surgical_procedures[name] = float(price)
-
-# Anesthesia fee schedule (hardcoded from screenshot)
-anesthesia_rates = {
-    1.0: 750.00, 1.5: 960.00, 2.0: 1165.00, 2.5: 1365.00, 3.0: 1570.00,
-    3.5: 1775.00, 4.0: 1980.00, 4.5: 2185.00, 5.0: 2390.00, 5.5: 2600.00,
-    6.0: 2800.00, 6.5: 3005.00, 7.0: 3210.00, 7.5: 3415.00, 8.0: 3620.00,
-    8.5: 3825.00, 9.0: 4030.00, 9.5: 4235.00, 10.0: 4440.00
+# Surgeon fee schedule (from PDF)
+surgeon_fees = {
+    "Breast Augmentation": 4000,
+    "Breast Lift": 4500,
+    "Tummy Tuck": 6000,
+    "Liposuction": 3000,
+    "Mommy Makeover": 8500,
+    "Breast Revision": 4800,
+    "Breast Reduction": 5200
 }
 
-st.title("Surgical Quote Builder – Dr. Tomur")
+# Facility fee logic (1st at 100%, rest at 50%)
+facility_fees = {
+    "Breast Augmentation": 403,
+    "Breast Lift": 525,
+    "Tummy Tuck": 670,
+    "Liposuction": 345,
+    "Mommy Makeover": 780,
+    "Breast Revision": 490,
+    "Breast Reduction": 510
+}
+
+# Anesthesia fee schedule (based on exact time tiers)
+anesthesia_schedule = {
+    1: 750, 1.5: 960, 2: 1165, 2.5: 1365, 3: 1570, 3.5: 1775,
+    4: 1980, 4.5: 2185, 5: 2390, 5.5: 2600, 6: 2800, 6.5: 3005,
+    7: 3210, 7.5: 3415, 8: 3620, 8.5: 3825, 9: 4030, 9.5: 4235, 10: 4440
+}
+
+# Add-on costs
+add_ons = {
+    "Silicone Implants": 1300,
+    "Overnight Stay": 850,
+    "Compression Garments": 150
+}
+
+st.title("💼 SST Plastic Surgery Quote Builder")
 
 # Procedure selection
-selected_procedures = st.multiselect("Select Procedures", options=list(surgical_procedures.keys()))
+selected_procedures = st.multiselect(
+    "Select Procedure(s)", options=list(surgeon_fees.keys()), default=["Breast Augmentation"]
+)
 
-# Time in OR for Anesthesia and Facility Fee
-or_time = st.selectbox("Select OR Time (in hours)", options=list(anesthesia_rates.keys()))
+# Estimated OR time
+or_time = st.selectbox(
+    "Select Estimated OR Time (Hours)", options=list(anesthesia_schedule.keys()), index=0
+)
 
-# Quote computation
-if st.button("Generate Quote") and selected_procedures:
-    # Sort by fee descending to get highest fee
-    sorted_procs = sorted(selected_procedures, key=lambda x: surgical_procedures[x], reverse=True)
-    surgeon_fee_total = 0
-    facility_fee_total = 0
+# Optional add-ons
+st.markdown("### Optional Add-ons")
+selected_addons = []
+for item in add_ons:
+    if st.checkbox(f"{item} (+${add_ons[item]})"):
+        selected_addons.append(item)
 
-    for i, proc in enumerate(sorted_procs):
-        base_fee = surgical_procedures[proc]
-        if i == 0:
-            surgeon_fee_total += base_fee
-            facility_fee_total += base_fee  # 100% of highest
-        else:
-            surgeon_fee_total += 0.5 * base_fee
-            facility_fee_total += 0.5 * base_fee  # 50% of additional
+# Fee calculations
+primary_proc = max(selected_procedures, key=lambda x: surgeon_fees[x])
+surgeon_fee = surgeon_fees[primary_proc] + sum(surgeon_fees[proc] * 0.5 for proc in selected_procedures if proc != primary_proc)
+facility_fee = facility_fees[primary_proc] + sum(facility_fees[proc] * 0.5 for proc in selected_procedures if proc != primary_proc)
+anesthesia_fee = anesthesia_schedule[or_time]
+supplies_fee = sum(add_ons[item] for item in selected_addons)
 
-    anesthesia_fee = anesthesia_rates[or_time]
+# Quote summary
+st.markdown("## Quote Summary")
+st.write(f"**Surgeon Fee:** ${surgeon_fee:,.2f}")
+st.write(f"**Anesthesia Fee:** ${anesthesia_fee:,.2f}")
+st.write(f"**Facility Fee:** ${facility_fee:,.2f}")
+st.write(f"**Supplies/Add-ons:** ${supplies_fee:,.2f}")
 
-    st.subheader("Quote Summary")
-    st.markdown(f"**Surgeon Fee:** ${surgeon_fee_total:,.2f}")
-    st.markdown(f"**Facility Fee:** ${facility_fee_total:,.2f}")
-    st.markdown(f"**Anesthesia Fee (for {or_time} hr):** ${anesthesia_fee:,.2f}")
-    st.markdown("---")
-    st.markdown(f"**Total Estimate:** ${surgeon_fee_total + facility_fee_total + anesthesia_fee:,.2f}")
-else:
-    st.info("Select at least one procedure and click 'Generate Quote'")
+total = surgeon_fee + anesthesia_fee + facility_fee + supplies_fee
+st.markdown(f"### **Total Estimate: ${total:,.2f}**")
